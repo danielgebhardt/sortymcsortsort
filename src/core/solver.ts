@@ -285,3 +285,36 @@ export function demoteUselessSliders(level: Level): number {
   for (const b of level.blocks) if (ids.has(b.id)) delete b.slider;
   return ids.size;
 }
+
+/**
+ * How the slides in a level's solution look, to keep slider puzzles varied:
+ * where in the solution they happen (0 = first move, 1 = last), whether they could already be made
+ * safely on the very first move (no timing needed), and whether the next three moves are all single-cell blocks
+ * (the old repetitive "little square" pattern).
+ */
+export function slideStats(level: Level): { positions: number[]; availableAtStart: number; followedBySingles: number } {
+  const out = { positions: [] as number[], availableAtStart: 0, followedBySingles: 0 };
+  const sol = level.solution;
+  if (!sol) return out;
+  const start = new Board(level);
+  const lenOf = new Map(level.blocks.map((b) => [b.id, b.len]));
+  const board = new Board(level);
+  sol.forEach((id, k) => {
+    if (board.tap(id).kind !== 'slide') return;
+    out.positions.push(k / sol.length);
+    // "Free and safe at the start": could slide on move one, and doing so doesn't ruin the board.
+    // (A slide that's possible early but is a trap needs timing — that's fine.)
+    const s0 = start.blocks.get(id);
+    if (s0) {
+      const p0 = start.probe(s0);
+      if (p0.hit !== null && p0.distance > 0 && !start.isLocked(s0)) {
+        const early = copyBoard(start);
+        early.tap(id);
+        if (search(early, 5_000).solvable === true) out.availableAtStart++;
+      }
+    }
+    const next = sol.slice(k + 1, k + 4);
+    if (next.length === 3 && next.every((n) => lenOf.get(n) === 1)) out.followedBySingles++;
+  });
+  return out;
+}

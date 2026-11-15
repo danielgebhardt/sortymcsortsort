@@ -153,7 +153,8 @@ export function paramsFor(n: number): GenParams {
     locks: n < INTRO.locks || intro ? 0 : (breather ? 0 : 1) + (has('locks') ? Math.round(t * 2) : 0),
     // Any level with sliders gets at least two: one for a built-in forced slide, one free to be a trap.
     sliders: sliderChapter ? (intro ? 2 : 2 + Math.round(t * 4) + (spike ? 1 : 0)) : has('sliders') ? Math.max(2, amount(4)) : pressured('sliders') ? 2 + Math.round(t * 2) : 0,
-    forced: sliderChapter ? (intro ? 1 : 1 + Math.round(t * 2)) : pressured('sliders') ? 1 : has('sliders') ? (intro ? 1 : 1 + Math.round(t)) : 0,
+    // Forced-slide loops per level: more as each chapter goes on, and more in later chapters.
+    forced: intro ? 1 : sliderChapter ? 1 + Math.round(t * 3) : pressured('sliders') || has('sliders') ? 1 + Math.round(t * (ci > 8 ? 3 : 2)) : 0,
     pullback: has('sliders') || pressured('sliders') ? (intro ? 1 : clamp(0.5 + 0.4 * t, 0, 0.9)) : 0,
     twins: has('twins') ? amount(3) : 0,
     bombs: has('bombs') ? amount(3) : 0,

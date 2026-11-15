@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { buildLevelWithStats, chapterFor, pack, PACKED_LEVELS } from '../src/core/progression';
-import { replay } from '../src/core/solver';
+import { replay, slideStats } from '../src/core/solver';
 
 // Usage: npm run levels                            → rebuild (keeps frozen levels; see generate-parallel.sh)
 //        tsx scripts/generate-levels.ts            → build all 600 from scratch (ignores freezing!)
@@ -28,11 +28,17 @@ if (process.env.REPAIR) {
 const [from, to] = process.argv[2] ? [Number(process.argv[2]), Number(process.argv[3] ?? process.argv[2])] : [1, PACKED_LEVELS];
 const out = [];
 const t0 = Date.now();
+const variety = { slides: 0, positions: [] as number[], atStart: 0, singles: 0 };
 for (let n = from; n <= to; n++) {
   const t = Date.now();
   const { level, stats } = buildLevelWithStats(n);
   if (!level.solution || !replay(level, level.solution)) throw new Error(`level ${n}: shipped solution does not clear the board`);
   out.push(pack(level));
+  const ss = slideStats(level);
+  variety.slides += ss.positions.length;
+  variety.positions.push(...ss.positions);
+  variety.atStart += ss.availableAtStart;
+  variety.singles += ss.followedBySingles;
   const { chapter, i } = chapterFor(n);
   if (from !== 1 || i === 0 || i % 5 === 4 || n % 30 === 0) {
     const count = (f: (b: (typeof level.blocks)[number]) => unknown) => level.blocks.filter(f).length;
@@ -46,4 +52,9 @@ for (let n = from; n <= to; n++) {
 }
 if (process.env.OUT) writeFileSync(process.env.OUT, JSON.stringify(out));
 else if (from === 1 && to === PACKED_LEVELS) writeFileSync(new URL('../src/levels/levels.json', import.meta.url), JSON.stringify(out));
+if (variety.slides) {
+  const med = variety.positions.sort((a, b) => a - b)[Math.floor(variety.positions.length / 2)];
+  const pct = (x: number) => `${Math.round((x / variety.slides) * 100)}%`;
+  console.log(`slides: ${variety.slides}  median position ${Math.round(med * 100)}%  free+safe at start ${pct(variety.atStart)}  followed by 3 singles ${pct(variety.singles)}`);
+}
 console.log(`built ${out.length} levels in ${((Date.now() - t0) / 1000).toFixed(1)}s`);

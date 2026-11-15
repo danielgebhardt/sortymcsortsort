@@ -3,7 +3,7 @@ import { Board } from '../src/core/board';
 import { generate, GenParams } from '../src/core/generator';
 import { createHash } from 'node:crypto';
 import { buildLevel, CHAPTERS, chapterFor, pack, paramsFor, TUTORIAL, unpack, winCeiling } from '../src/core/progression';
-import { needsSlides, randomWinRate, replay, solve, uselessSliders } from '../src/core/solver';
+import { needsSlides, randomWinRate, replay, slideStats, solve, uselessSliders } from '../src/core/solver';
 import packed from '../src/levels/levels.json';
 
 describe('generator', () => {
@@ -100,6 +100,26 @@ describe('shipped levels', () => {
       if (ids.length) pointless.push(`level ${n}: ${ids.join(',')}`);
     }
     expect(pointless).toEqual([]);
+  }, 300_000);
+
+  // Slider puzzles should vary: not always at the end, not always a free first move, and not the
+  // same little square of single-cell blocks every time.
+  it('slides are varied', () => {
+    const positions: number[] = [];
+    let atStart = 0, singles = 0;
+    for (let n = 31; n <= 600; n++) {
+      const s = slideStats(unpack(levels[n - 1]));
+      positions.push(...s.positions);
+      atStart += s.availableAtStart;
+      singles += s.followedBySingles;
+    }
+    positions.sort((a, b) => a - b);
+    const median = positions[Math.floor(positions.length / 2)];
+    expect(positions.length).toBeGreaterThan(400);
+    expect(median).toBeGreaterThanOrEqual(0.3);
+    expect(median).toBeLessThanOrEqual(0.68);
+    expect(atStart / positions.length).toBeLessThanOrEqual(0.35);
+    expect(singles / positions.length).toBeLessThanOrEqual(0.25);
   }, 300_000);
 
   it('builds endless levels past the shipped pack', () => {

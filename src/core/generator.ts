@@ -1,7 +1,7 @@
 import { Board, cellsOf, headOf } from './board';
 import { Rng } from './rng';
 import { demoteUselessSliders, replay } from './solver';
-import { Block, DELTA, DIRS, Dir, Gate, Level, isHorizontal, turnCCW } from './types';
+import { Block, DELTA, DIRS, Gate, Level, isHorizontal, turnCCW } from './types';
 
 export interface GenParams {
   w: number;
@@ -28,7 +28,7 @@ export interface GenParams {
   spinners: number;
   /** Number of gates. */
   gates: number;
-  /** Number of built-in forced slides (see `forcedSlideTemplate`). Needs sliders. */
+  /** Number of built-in forced slides (see `forcedSlideLoop`). Needs sliders. */
   forced?: number;
 }
 
@@ -88,6 +88,11 @@ export function generateWithStats(seed: number, p: GenParams): GenResult {
   // Specials are spread over the first ~75% of placements, so they end up in the middle of the solution.
   const want = (n: number) => n > 0 && rng.next() < n / Math.max(1, expected * 0.75 - nextId);
 
+  /** Set after a forced-slide loop: the next placement should be a timing trap if one is possible. */
+  let trapNext = false;
+  /** Don't try to build a forced-slide loop before this placement number. */
+  let nextLoopTry = 0;
+
   const place = (b: Block) => {
     board.add(b);
     addPath(b, 1);
@@ -99,10 +104,14 @@ export function generateWithStats(seed: number, p: GenParams): GenResult {
     if (cands.length === 0) break;
     const spinnersBefore = [...board.blocks.values()].filter((b) => b.spinner);
 
-    if (left.forced > 0 && want(left.forced)) {
-      const f = forcedSlideTemplate(board, rng, nextId);
+    // Forced-slide loops go in while the build is 25%+ done, so the slide lands mid-level
+    // (the build runs backwards: early in the build = late in the solution).
+    // Once the window opens, keep trying (every couple of placements) until all loops are built.
+    if (left.forced > 0 && nextId >= expected * 0.2 && nextId >= nextLoopTry) {
+      const f = forcedSlideLoop(board, rng, nextId, p.maxLen);
+      nextLoopTry = nextId + (f ? Math.max(2, Math.floor(expected * 0.5 / Math.max(1, left.forced))) : 2);
       if (f) {
-        // Three placements (each a "block leaves" event), then the pull-back.
+        // Each new loop block is a placement ("block leaves" event), then the pull-back.
         for (const b of f.blocks) {
           for (const sp of board.blocks.values()) if (sp.spinner) sp.dir = turnCCW(sp.dir);
           place(b);
@@ -118,6 +127,27 @@ export function generateWithStats(seed: number, p: GenParams): GenResult {
         steps.push(f.slider.id);
         pullbacks++;
         left.forced--;
+        // "Right moment" twist: either plug the gap the slider slides through (it can't slide until
+        // that block leaves), or next place a block that must leave through the gap *before* the
+        // slide (sliding early is a trap).
+        const twist = rng.next();
+        if (twist < 0.8) {
+          const gap = new Set<number>();
+          for (const c of pathCells(board, moved)) {
+            if (board.at(c % board.w, Math.floor(c / board.w)) !== null) break;
+            gap.add(c);
+          }
+          const plugs = candidates(board, p.maxLen, nextId, pathCount).filter((c) => cellsOf(c.block).some(([x, y]) => gap.has(y * board.w + x)));
+          if (plugs.length) {
+            const plug = choose(rng, plugs, p.tangle).block;
+            for (const sp of board.blocks.values()) if (sp.spinner) sp.dir = turnCCW(sp.dir);
+            place(plug);
+            steps.push(plug.id);
+            nextId++;
+          }
+        } else if (twist < 0.95) {
+          trapNext = true;
+        }
         continue;
       }
     }
@@ -157,12 +187,15 @@ export function generateWithStats(seed: number, p: GenParams): GenResult {
       if (p.sliders > 0) {
         const traps = cands.filter((c) => c.bonus >= 6);
         const setups = cands.filter((c) => c.bonus >= 2.5);
-        if (traps.length && rng.next() < 0.45) cands = traps;
+        if (traps.length && (trapNext || rng.next() < 0.45)) cands = traps;
         else if (setups.length && rng.next() < 0.75) cands = setups;
+        trapNext = false;
       }
       const c = choose(rng, cands, p.tangle);
       // A slider on the edge pointing out could never slide partway — don't waste one there.
-      if (c.ray > 0 && want(left.sliders) && c.block.len <= 3) {
+      // Loops need a slider to build around: if none is on the board yet, make this one a slider.
+      const needOne = (p.forced ?? 0) > 0 && left.sliders > 0 && ![...board.blocks.values()].some((b) => b.slider);
+      if (c.ray > 0 && (needOne || want(left.sliders)) && c.block.len <= 3) {
         c.block.slider = true;
         left.sliders--;
       }
@@ -183,7 +216,8 @@ export function generateWithStats(seed: number, p: GenParams): GenResult {
       }
     }
 
-    if (p.sliders > 0 && rng.next() < p.pullback) {
+    // Simple pull-backs too only after the first 30% of the build, so slides don't pile up at the end.
+    if (p.sliders > 0 && nextId >= expected * 0.3 && rng.next() < p.pullback) {
       const pb = tryPullback(board, rng, pathCount, addPath);
       if (pb) {
         steps.push(pb.id);
@@ -273,62 +307,104 @@ function sliderHotspots(board: Board) {
   return { ahead, stop, gaps, traps };
 }
 
-const OPPOSITE: Record<Dir, Dir> = { up: 'down', down: 'up', left: 'right', right: 'left' };
-
 /**
- * Build a guaranteed forced slide around an existing slider S (shown pointing right):
+ * Build a loop that forces slider S to slide partway, varied in shape and size:
  *
- *   - O goes right in front of S, pointing across S's line (S will wait on O).
- *   - M goes somewhere on O's path, pointing back past S (O waits on M).
- *   - N goes on M's path, in line with a cell just behind S, pointing across S's line (M waits on N).
- *   - S is pulled back over that cell (N waits on S).
+ *   B1 sits right in front of S (a new block, or whatever S is already pressed against), so S waits
+ *   on B1. Each following link sits on the previous one's exit path (so the previous waits on it).
+ *   The last link's exit path runs through a cell just behind S, and S is pulled back over that
+ *   cell — so the last link waits on S. That closes the loop: the only way out is to slide S
+ *   forward first, which uncovers the last link's way out.
  *
- * That's a cycle — unless S slides forward first, which uncovers N's exit. Returns the three new
- * blocks (in placement order) and how far to pull S back, or null if no layout fits.
+ * Links are 1–`maxLen` long, any direction, 2–4 blocks in the loop, preferring spots a few cells
+ * apart so it doesn't look like a tight little square. Returns the new blocks (placement order)
+ * and how far to pull S back, or null if nothing fits within the search budget.
  */
-function forcedSlideTemplate(board: Board, rng: Rng, id: number): { blocks: Block[]; slider: Block; back: number } | null {
-  const sliders = rng.shuffle([...board.blocks.values()].filter((b) => b.slider));
-  for (const S of sliders) {
+function forcedSlideLoop(board: Board, rng: Rng, id: number, maxLen: number): { blocks: Block[]; slider: Block; back: number } | null {
+  let budget = 1500;
+  for (const S of rng.shuffle([...board.blocks.values()].filter((b) => b.slider))) {
     const { dx, dy } = DELTA[S.dir];
     const [hx, hy] = headOf(S);
     const ax = hx + dx, ay = hy + dy;
-    if (!board.inBounds(ax, ay) || board.at(ax, ay) !== null) continue;
+    if (!board.inBounds(ax, ay)) continue;
     const cells = cellsOf(S);
     const [tx, ty] = S.dir === 'right' || S.dir === 'down' ? cells[0] : cells[cells.length - 1];
-    const behind: Array<[number, number]> = [];
+    const behind: number[] = [];
     for (let t = 1; t <= 3; t++) {
       const bx = tx - dx * t, by = ty - dy * t;
       if (!board.inBounds(bx, by) || board.at(bx, by) !== null) break;
-      behind.push([bx, by]);
+      behind.push(by * board.w + bx);
     }
     if (!behind.length) continue;
-    const horiz = isHorizontal(S.dir);
-    const across: Dir[] = horiz ? ['up', 'down'] : ['left', 'right'];
-    for (const od of rng.shuffle([...across])) {
-      const O: Block = { id, x: ax, y: ay, len: 1, dir: od };
-      if (board.probe(O).hit !== null) continue;
-      board.add(O);
-      for (const mc of rng.shuffle(pathCells(board, O))) {
-        const M: Block = { id: id + 1, x: mc % board.w, y: Math.floor(mc / board.w), len: 1, dir: OPPOSITE[S.dir] };
-        if (!board.canPlace(M) || board.probe(M).hit !== null) continue;
-        board.add(M);
-        const mPath = new Set(pathCells(board, M));
-        for (const [t, [bx, by]] of rng.shuffle(behind.map((c, i) => [i + 1, c] as [number, [number, number]]))) {
-          const nx = horiz ? bx : M.x;
-          const ny = horiz ? M.y : by;
-          if (!mPath.has(ny * board.w + nx)) continue;
-          const nd: Dir = horiz ? (ny < by ? 'down' : 'up') : nx < bx ? 'right' : 'left';
-          const N: Block = { id: id + 2, x: nx, y: ny, len: 1, dir: nd };
-          if (!board.canPlace(N) || board.probe(N).hit !== null) continue;
-          if (!pathCells(board, N).includes(by * board.w + bx)) continue;
-          board.remove(M.id);
-          board.remove(O.id);
-          return { blocks: [O, M, N], slider: S, back: t };
+    const behindSet = new Set(behind);
+    const fresh: Block[] = [];
+
+    /** Every placement of a new block covering cell (cx, cy) with a clear path, in random order. */
+    const placementsAt = (cx: number, cy: number): Block[] => {
+      const out: Block[] = [];
+      for (const dir of DIRS) {
+        for (let len = 1; len <= maxLen; len++) {
+          for (let off = 0; off < len; off++) {
+            const nb: Block = { id: id + fresh.length, x: isHorizontal(dir) ? cx - off : cx, y: isHorizontal(dir) ? cy : cy - off, len, dir };
+            if (!board.canPlace(nb) || board.probe(nb).hit !== null) continue;
+            if (cellsOf(nb).some(([x, y]) => behindSet.has(y * board.w + x))) continue; // S needs those cells
+            out.push(nb);
+          }
         }
-        board.remove(M.id);
       }
-      board.remove(O.id);
+      return rng.shuffle(out);
+    };
+
+    const extend = (chain: Block[]): number | null => {
+      if (--budget <= 0) return null;
+      const last = chain[chain.length - 1];
+      const lastPath = pathCells(board, last);
+      if (chain.length >= 2) {
+        for (let t = 0; t < behind.length; t++) if (lastPath.includes(behind[t])) return t + 1;
+      }
+      if (chain.length >= 4) return null;
+      // Spots on the last link's path; prefer ones 2+ cells away (no tight squares).
+      const spots = lastPath.filter((c) => board.at(c % board.w, Math.floor(c / board.w)) === null);
+      const far = rng.shuffle(spots.filter((_, i) => i >= 1));
+      const near = spots.slice(0, 1);
+      for (const c of [...far, ...near].slice(0, 8)) {
+        for (const nb of placementsAt(c % board.w, Math.floor(c / board.w)).slice(0, 6)) {
+          board.add(nb);
+          fresh.push(nb);
+          const back = extend([...chain, nb]);
+          if (back !== null) return back;
+          fresh.pop();
+          board.remove(nb.id);
+          if (budget <= 0) return null;
+        }
+      }
+      return null;
+    };
+
+    let back: number | null = null;
+    const occ = board.at(ax, ay);
+    if (occ === null) {
+      for (const b1 of placementsAt(ax, ay).slice(0, 10)) {
+        // B1 must not point back into S (it would wait on S instead of the other way round).
+        board.add(b1);
+        fresh.push(b1);
+        back = extend([b1]);
+        if (back !== null) break;
+        fresh.pop();
+        board.remove(b1.id);
+        if (budget <= 0) break;
+      }
+    } else if (typeof occ === 'number' && occ !== S.id && !board.blocks.get(occ)!.slider) {
+      back = extend([board.blocks.get(occ)!]); // weave the loop through an existing block
     }
+    for (const b of fresh) board.remove(b.id);
+    if (back !== null) {
+      // Sometimes a link is itself a slider: it can make a second, chained slide necessary, or add a
+      // trap. Any that end up not mattering are turned back into plain blocks later.
+      const out = fresh.map((b) => ({ ...b, ...(b.len <= 3 && rng.next() < 0.25 ? { slider: true } : {}) }));
+      return { blocks: out, slider: S, back };
+    }
+    if (budget <= 0) return null;
   }
   return null;
 }
@@ -359,7 +435,7 @@ function waitChainPaths(board: Board, first: number, skip: number): Set<number> 
  * Pull one slider back along its line (see `generate`). The best pull-backs are *necessary*: the
  * slider lands on the path of a block that its own stopper is waiting on. Then the slider can't
  * leave whole (its stopper is still there) and that block can't leave past it, so the only way
- * through is to slide it partway first. Unnecessary pull-backs are only taken occasionally.
+ * through is to slide it partway first. Pull-backs that would not create such a need are skipped.
  */
 function tryPullback(board: Board, rng: Rng, pathCount: Int32Array, addPath: (b: Block, s: 1 | -1) => void): { id: number; forced: boolean } | null {
   let best: { b: Block; steps: number; score: number; forced: boolean } | null = null;
@@ -390,7 +466,8 @@ function tryPullback(board: Board, rng: Rng, pathCount: Int32Array, addPath: (b:
       if (!best || score > best.score) best = { b, steps, score, forced: necessary > 0 };
     }
   }
-  if (!best || (!best.forced && rng.next() > 0.25)) return null;
+  // Only pull-backs that create a real need: a slide nobody needs is a free move that teaches nothing.
+  if (!best || !best.forced) return null;
   const { b, steps } = best;
   const { dx, dy } = DELTA[b.dir];
   addPath(b, -1);
