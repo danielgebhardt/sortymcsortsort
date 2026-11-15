@@ -2,7 +2,8 @@ import { writeFileSync } from 'node:fs';
 import { buildLevelWithStats, chapterFor, pack, PACKED_LEVELS } from '../src/core/progression';
 import { replay } from '../src/core/solver';
 
-// Usage: tsx scripts/generate-levels.ts            → build all and write levels.json
+// Usage: npm run levels                            → rebuild (keeps frozen levels; see generate-parallel.sh)
+//        tsx scripts/generate-levels.ts            → build all 600 from scratch (ignores freezing!)
 //        tsx scripts/generate-levels.ts 31 40      → just print stats for a range
 //        OUT=part.json tsx scripts/generate-levels.ts 1 150   → write that range to a file (for parallel builds)
 const [from, to] = process.argv[2] ? [Number(process.argv[2]), Number(process.argv[3] ?? process.argv[2])] : [1, PACKED_LEVELS];
@@ -20,7 +21,7 @@ for (let n = from; n <= to; n++) {
       `L${String(n).padStart(3)} ${chapter.name.padEnd(15)} ${level.w}x${String(level.h).padEnd(2)} blocks=${String(stats.blocks).padStart(2)} ` +
         `free=${String(stats.initialFree).padStart(2)} depth=${String(stats.depth).padStart(2)} sol=${String(level.solution.length).padStart(2)} ` +
         `walls=${level.walls.length} locks=${count((b) => b.lockedBy !== undefined)} slide=${count((b) => b.slider)} twin=${count((b) => b.twin !== undefined) / 2} ` +
-        `bomb=${count((b) => b.fuse !== undefined)} spin=${count((b) => b.spinner)} gate=${level.gates?.length ?? 0} forced=${stats.pullbacks} traps=${stats.traps} ${Date.now() - t}ms`,
+        `bomb=${count((b) => b.fuse !== undefined)} spin=${count((b) => b.spinner)} gate=${level.gates?.length ?? 0} forced=${stats.pullbacks} win=${String(Math.round(stats.winRate * 100)).padStart(3)}% needSlide=${stats.needsSlide ? 'Y' : '-'} ${Date.now() - t}ms`,
     );
   }
 }

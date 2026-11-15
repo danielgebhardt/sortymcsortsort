@@ -1,6 +1,6 @@
 import { generateWithStats, GenParams, NO_SPECIALS } from './generator';
 import { Board } from './board';
-import { countMoves, countTraps, isMonotone, solve } from './solver';
+import { countMoves, isMonotone, needsSlides, randomWinRate, solve } from './solver';
 import { Block, DIRS, Dir, Level } from './types';
 
 /** Number of levels that ship precomputed in levels.json. Beyond this, levels are generated on the fly. */
@@ -51,6 +51,11 @@ export interface Chapter {
   name: string;
   /** Mechanics featured in this chapter (on top of walls, and the odd lock). */
   mix: Mechanic[];
+  /**
+   * Extra mechanics mixed in after the intro levels. Chapters whose own idea can never cause a
+   * dead end (twins, gates…) get a few sliders so you still have to plan.
+   */
+  pressure?: Mechanic[];
   /** Shown on the chapter's first level. */
   tip?: string;
 }
@@ -60,10 +65,10 @@ export const CHAPTER_LEN = 30;
 export const CHAPTERS: Chapter[] = [
   { from: 1, name: 'Warm Up', mix: [] },
   { from: 31, name: 'Sliders', mix: ['sliders'], tip: 'Double-arrow blocks are SLIDERS: they slide\nas far as they can and stay there. Slide too\nearly and you can trap others. Undo helps!' },
-  { from: 61, name: 'Twins', mix: ['twins'], tip: 'Linked TWINS leave together. Tap either one —\nboth paths must be clear at the same time.' },
+  { from: 61, name: 'Twins', mix: ['twins'], pressure: ['sliders'], tip: 'Linked TWINS leave together. Tap either one —\nboth paths must be clear at the same time.' },
   { from: 91, name: 'Bombs', mix: ['bombs'], tip: 'BOMBS count down with every move.\nDig them out before they reach zero!' },
-  { from: 121, name: 'Spinners', mix: ['spinners'], tip: 'SPINNERS turn a quarter clockwise every\ntime another block leaves. Time it right!' },
-  { from: 151, name: 'Gates', mix: ['gates'], tip: 'GATES block the way until the block with\nthe matching key badge leaves the board.' },
+  { from: 121, name: 'Spinners', mix: ['spinners'], pressure: ['sliders'], tip: 'SPINNERS turn a quarter clockwise every\ntime another block leaves. Time it right!' },
+  { from: 151, name: 'Gates', mix: ['gates'], pressure: ['sliders'], tip: 'GATES block the way until the block with\nthe matching key badge leaves the board.' },
   { from: 181, name: 'Slip & Pair', mix: ['sliders', 'twins'] },
   { from: 211, name: 'Locked & Loaded', mix: ['bombs', 'gates', 'locks'] },
   { from: 241, name: 'Spin Cycle', mix: ['spinners', 'sliders'] },
@@ -125,7 +130,9 @@ export function paramsFor(n: number): GenParams {
   if (spike) { density += 0.04; tangle = 1; }
 
   const has = (m: Mechanic) => chapter.mix.includes(m);
+  const pressured = (m: Mechanic) => !!chapter.pressure?.includes(m);
   const remix = chapter.mix.length > 1;
+  const sliderChapter = chapter.mix.length === 1 && has('sliders');
   // How many of a featured mechanic: 1 on intro levels, climbing through the chapter.
   const amount = (max: number) => {
     if (intro) return 1;
@@ -144,8 +151,10 @@ export function paramsFor(n: number): GenParams {
     maxLen: n < 12 ? 2 : w >= 7 ? 4 : 3,
     walls: n < INTRO.walls ? 0 : n === INTRO.walls ? 2 : intro ? 0 : Math.round(area * (has('gates') ? 0.015 : 0.02 + 0.03 * t)),
     locks: n < INTRO.locks || intro ? 0 : (breather ? 0 : 1) + (has('locks') ? Math.round(t * 2) : 0),
-    sliders: has('sliders') ? amount(4) : 0,
-    pullback: has('sliders') ? (intro ? 1 : clamp(0.35 + 0.4 * t, 0, 0.8)) : 0,
+    // Any level with sliders gets at least two: one for a built-in forced slide, one free to be a trap.
+    sliders: sliderChapter ? (intro ? 2 : 2 + Math.round(t * 4) + (spike ? 1 : 0)) : has('sliders') ? Math.max(2, amount(4)) : pressured('sliders') ? 2 + Math.round(t * 2) : 0,
+    forced: sliderChapter ? (intro ? 1 : 1 + Math.round(t * 2)) : pressured('sliders') ? 1 : has('sliders') ? (intro ? 1 : 1 + Math.round(t)) : 0,
+    pullback: has('sliders') || pressured('sliders') ? (intro ? 1 : clamp(0.5 + 0.4 * t, 0, 0.9)) : 0,
     twins: has('twins') ? amount(3) : 0,
     bombs: has('bombs') ? amount(3) : 0,
     bombSlack: intro ? 4 : remix ? 2 : Math.max(0, 2 - Math.round(t * 2)),
@@ -164,12 +173,30 @@ export interface LevelStats {
   /** Chain depth (levels without sliders, spinners or bombs). */
   depth: number;
   initialFree: number;
+  /** Necessary partial slides built in. */
   pullbacks: number;
-  traps: number;
+  /** How often tapping random movable blocks still wins (0..1). Lower = more planning needed. */
+  winRate: number;
+  /** Can't be solved without sliding a slider partway. */
+  needsSlide: boolean;
 }
 
 /**
- * Make a level: try several seeds and keep the hardest one for this spot in the curve.
+ * The hardest a level is allowed to be "solvable by random tapping" (see `randomWinRate`).
+ * Warm Up has no limit (its blocks can't cause dead ends). After that it tightens through each chapter.
+ */
+export function winCeiling(n: number): number {
+  const { index: ci, i } = chapterFor(n);
+  if (ci === 0) return 1;
+  if (i < 2) return 0.5;
+  const t = i / (CHAPTER_LEN - 1);
+  const base = ci === 1 ? 0.35 + (0.05 - 0.35) * t : 0.2 + (0.03 - 0.2) * t;
+  return i % 10 === 4 ? base + 0.15 : base;
+}
+
+/**
+ * Make a level: generate candidates and keep the first good one — random tapping has to fail
+ * often enough, and sliders (outside intros) have to actually need sliding.
  * `fast` is used for endless levels generated on the phone.
  */
 export function buildLevel(n: number, fast = false): Level {
@@ -180,38 +207,46 @@ export function buildLevelWithStats(n: number, fast = false): { level: Level; st
   if (n <= TUTORIAL.length) {
     const level = TUTORIAL[n - 1];
     const s = solve(level);
-    return { level: { ...level, solution: s.order }, stats: { blocks: level.blocks.length, depth: s.depth, initialFree: s.initialFree, pullbacks: 0, traps: 0 } };
+    return { level: { ...level, solution: s.order }, stats: { blocks: level.blocks.length, depth: s.depth, initialFree: s.initialFree, pullbacks: 0, winRate: 1, needsSlide: false } };
   }
   const p = paramsFor(n);
-  const { i } = chapterFor(n);
-  const easy = (i % 10 === 4) || n < 8;
-  const tries = fast ? 3 : easy ? 4 : 14;
+  const { index: ci, i } = chapterFor(n);
+  const intro = ci > 0 && i < 2;
+  const ceiling = winCeiling(n);
+  const maxTries = fast ? 6 : ci === 0 ? (i % 10 === 4 || n < 8 ? 4 : 14) : 40;
+  const minTries = fast ? 1 : ci === 0 ? maxTries : 4;
+  const runs = fast ? 40 : 120;
   let best: { level: Level; stats: LevelStats } | null = null;
   let bestScore = -Infinity;
-  for (let k = 0; k < tries; k++) {
+  let tried = 0;
+  for (let k = 0; k < maxTries; k++) {
     let gen;
     try {
       gen = generateWithStats(seedFor(n) + k * 7919, p);
     } catch {
       continue;
     }
+    tried++;
     const { level, pullbacks } = gen;
-    if (p.sliders > 0 && i < 2 && pullbacks === 0 && k < tries - 1) continue; // slider intros must teach the partial slide
-    // The generator already proved the level by replaying its solution; these are just ratings.
+    if (p.sliders > 0 && intro && pullbacks === 0 && k < maxTries - 1) continue; // slider intros must teach the partial slide
+    const hasSliders = level.blocks.some((b) => b.slider);
     const initialFree = countMoves(new Board(level));
     const depth = isMonotone(level) ? solve(level).depth : 0;
-    const hasSliders = level.blocks.some((b) => b.slider);
-    const traps = hasSliders && !fast && level.blocks.length <= 45 ? countTraps(level, 1_500, 12, 25_000) : 0;
-    const stats = { blocks: level.blocks.length, depth, initialFree, pullbacks, traps };
-    // Harder = deeper chains, fewer free blocks at the start, more forced slides and traps.
-    const score = stats.depth * 1.2 - (stats.initialFree / stats.blocks) * 12 + pullbacks * 2 + Math.min(traps, 12) * 1.2 + stats.blocks * 0.1;
+    const winRate = ci === 0 ? 1 : randomWinRate(level, runs, n);
+    const needsSlide = hasSliders && !fast ? needsSlides(level, 20_000) : false;
+    const stats: LevelStats = { blocks: level.blocks.length, depth, initialFree, pullbacks, winRate, needsSlide };
+    // Everything after Warm Up must need planning: random tapping mostly fails, and sliders must need sliding.
+    const good = winRate <= ceiling && (!hasSliders || intro || fast || needsSlide);
+    // Mostly: lower random-win rate. Then the older measures — deep chains, few free blocks at the start.
+    const score = (good ? 100 : 0) - winRate * 40 + (needsSlide ? 4 : 0) + pullbacks + depth * 1.2 - (initialFree / stats.blocks) * 12 + stats.blocks * 0.1;
     if (score > bestScore) { best = { level, stats }; bestScore = score; }
+    if (good && tried >= minTries) break;
   }
   if (!best) {
     // Fall back to a plain level of the same size rather than failing.
     const level = generateWithStats(seedFor(n), { ...p, ...NO_SPECIALS }).level;
     const s = solve(level);
-    return { level, stats: { blocks: level.blocks.length, depth: s.depth, initialFree: s.initialFree, pullbacks: 0, traps: 0 } };
+    return { level, stats: { blocks: level.blocks.length, depth: s.depth, initialFree: s.initialFree, pullbacks: 0, winRate: 1, needsSlide: false } };
   }
   return best;
 }

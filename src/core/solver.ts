@@ -1,4 +1,5 @@
 import { Board, cellsOf, headOf } from './board';
+import { Rng } from './rng';
 import { Block, DELTA, Level } from './types';
 
 export interface SolveResult {
@@ -210,4 +211,35 @@ export function replay(level: Level, taps: number[]): boolean {
     if (board.exploded !== null) return false;
   }
   return board.cleared;
+}
+
+/**
+ * How often a player who taps any block that can move (without thinking) still wins.
+ * The main difficulty measure: low = you have to plan. Deterministic for a given seed.
+ */
+export function randomWinRate(level: Level, runs = 120, seed = 1): number {
+  const rng = new Rng(seed);
+  const start = new Board(level);
+  let wins = 0;
+  for (let r = 0; r < runs; r++) {
+    const b = copyBoard(start);
+    while (!b.cleared && b.exploded === null) {
+      const moves: number[] = [];
+      for (const x of b.blocks.values()) {
+        if (x.twin !== undefined && x.twin < x.id && b.blocks.has(x.twin)) continue;
+        if (b.canProgress(x)) moves.push(x.id);
+      }
+      if (!moves.length) break;
+      b.tap(rng.pick(moves));
+    }
+    if (b.cleared) wins++;
+  }
+  return wins / runs;
+}
+
+/** True if the level can't be solved without sliding some slider partway. */
+export function needsSlides(level: Level, limit = 50_000): boolean {
+  if (!level.blocks.some((b) => b.slider)) return false;
+  const plain: Level = { ...level, blocks: level.blocks.map(({ slider: _s, ...b }) => b) };
+  return solve(plain, limit).solvable === false;
 }

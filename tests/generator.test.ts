@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Board } from '../src/core/board';
 import { generate, GenParams } from '../src/core/generator';
-import { buildLevel, CHAPTERS, chapterFor, pack, paramsFor, TUTORIAL, unpack } from '../src/core/progression';
-import { replay, solve } from '../src/core/solver';
+import { createHash } from 'node:crypto';
+import { buildLevel, CHAPTERS, chapterFor, pack, paramsFor, TUTORIAL, unpack, winCeiling } from '../src/core/progression';
+import { needsSlides, randomWinRate, replay, solve } from '../src/core/solver';
 import packed from '../src/levels/levels.json';
 
 describe('generator', () => {
@@ -12,7 +13,7 @@ describe('generator', () => {
         w: 4 + (seed % 6), h: 5 + (seed % 7), density: 0.85, maxLen: 3, tangle: (seed % 10) / 9,
         walls: seed % 4, locks: seed % 3,
         sliders: seed % 3, pullback: (seed % 7) / 7, twins: (seed >> 1) % 3, bombs: (seed >> 2) % 3, bombSlack: seed % 3,
-        spinners: (seed >> 3) % 3, gates: (seed >> 4) % 3,
+        spinners: (seed >> 3) % 3, gates: (seed >> 4) % 3, forced: seed % 2,
       };
       const level = generate(seed, p);
       expect(() => new Board(level)).not.toThrow();
@@ -36,6 +37,8 @@ describe('generator', () => {
     expect(chapterFor(601).chapter.name).toMatch(/^Endless/);
   });
 });
+
+const FROZEN_HASH = 'ffafee3f5db2f59e2434775d94fc61cebc2641317baf96efffa0030225cf8c98';
 
 describe('shipped levels', () => {
   const levels = packed as ReturnType<typeof pack>[];
@@ -61,6 +64,32 @@ describe('shipped levels', () => {
       if (c.mix.includes('gates')) expect(ls.some((l) => l.gates?.length), c.name).toBe(true);
     }
   });
+
+  // Levels players have already finished must never change. When more levels ship, move this
+  // pin forward (FROZEN in scripts/generate-parallel.sh and the count + hash here).
+  it('levels 1–30 are frozen', () => {
+    const hash = createHash('sha256').update(JSON.stringify(levels.slice(0, 30))).digest('hex');
+    expect(hash).toBe(FROZEN_HASH);
+  });
+
+  it('from level 31 on, random tapping usually loses', () => {
+    let over = 0;
+    for (let n = 31; n <= 600; n++) {
+      if (randomWinRate(unpack(levels[n - 1]), 60, n) > winCeiling(n) + 0.1) over++;
+    }
+    expect(over).toBeLessThanOrEqual(Math.floor(570 * 0.05));
+  }, 120_000);
+
+  it('sliders usually have to be slid', () => {
+    let withSliders = 0, needed = 0;
+    for (let n = 31; n <= 600; n++) {
+      const l = unpack(levels[n - 1]);
+      if (chapterFor(n).i < 2 || !l.blocks.some((b) => b.slider)) continue;
+      withSliders++;
+      if (needsSlides(l, 20_000)) needed++;
+    }
+    expect(needed / withSliders).toBeGreaterThanOrEqual(0.75);
+  }, 300_000);
 
   it('builds endless levels past the shipped pack', () => {
     for (const n of [601, 650, 999]) {

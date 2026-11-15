@@ -39,6 +39,9 @@ export class PlayScene extends Phaser.Scene {
   private animating = 0;
   private hearts = MAX_HEARTS;
   private mistakes = 0;
+  /** Undo and hints are unlimited, but each caps the level's stars (once per level). */
+  private usedUndo = false;
+  private usedHint = false;
   private ended = false;
   private L!: Layout;
   private cs = 0;
@@ -66,6 +69,8 @@ export class PlayScene extends Phaser.Scene {
     this.twinColor.clear();
     this.hearts = MAX_HEARTS;
     this.mistakes = 0;
+    this.usedUndo = false;
+    this.usedHint = false;
     this.ended = false;
     this.hintG = undefined;
     this.overlay = undefined;
@@ -108,11 +113,15 @@ export class PlayScene extends Phaser.Scene {
       icon: (g, s) => draw.restartIcon(g, 0, -s * 0.04, s * 0.75, 0xffffff),
       onClick: () => this.scene.restart({ level: this.n }),
     });
-    button(this, {
+    const hintBtn = button(this, {
       x: W / 2 + gap, y: bottom, w: bw, h: u * 13, color: 0xe0a526,
       icon: (g, s) => draw.bulbIcon(g, 0, -s * 0.04, s * 0.75, 0xffffff),
       onClick: () => this.hint(),
     });
+    // "−★" badges: using these costs a star.
+    for (const b of [this.undoBtn, hintBtn]) {
+      b.add(label(this, bw * 0.3, -u * 4.6, '−★', u * 3.2, '#ffd84d'));
+    }
     this.refreshUndo();
 
     // ---- board area --------------------------------------------------------------------
@@ -381,9 +390,10 @@ export class PlayScene extends Phaser.Scene {
   }
 
   private toast(text: string) {
-    const { W, H, u } = this.L;
+    const { W, H, u, safe } = this.L;
     this.toastT?.destroy();
-    const t = label(this, W / 2, H * 0.5, text, u * 5, '#ffffff').setDepth(80);
+    // Just above the buttons, so it never covers the block a hint is pointing at.
+    const t = label(this, W / 2, H - safe.bottom - u * 30, text, u * 4.6, '#ffffff').setDepth(80);
     t.setBackgroundColor('#0d1030cc').setPadding(u * 3, u * 2, u * 3, u * 2);
     this.toastT = t;
     this.tweens.add({ targets: t, alpha: { from: 0, to: 1 }, duration: 150, yoyo: true, hold: 1600, onComplete: () => t.destroy() });
@@ -605,6 +615,21 @@ export class PlayScene extends Phaser.Scene {
       v.c.setAlpha(0.4);
       this.tweens.add({ targets: v.c, alpha: 1, duration: 160 });
     }
+    if (!this.usedUndo) {
+      this.usedUndo = true;
+      this.toast(`Undo used — this level now\ngives at most ${this.maxStars()} ★`);
+    }
+  }
+
+  /** Best possible stars from here: bounces, Undo and hints each cost one. */
+  private maxStars() {
+    return Math.max(1, 3 - this.mistakes - (this.usedUndo ? 1 : 0) - (this.usedHint ? 1 : 0));
+  }
+
+  private spendHint(): string {
+    if (this.usedHint) return '';
+    this.usedHint = true;
+    return `\nHint used — at most ${this.maxStars()} ★`;
   }
 
   private hint() {
@@ -613,7 +638,7 @@ export class PlayScene extends Phaser.Scene {
     const r = search(this.board, 30_000);
     let id: number | undefined;
     if (r.solvable === false) {
-      this.toast(this.history.length ? 'No way out from here —\ntry Undo!' : 'Hmm, try Restart.');
+      this.toast((this.history.length ? 'No way out from here —\ntry Undo!' : 'Hmm, try Restart.') + this.spendHint());
       this.tweens.add({ targets: this.undoBtn, scale: 1.15, duration: 160, yoyo: true, repeat: 2 });
       return;
     }
@@ -624,6 +649,8 @@ export class PlayScene extends Phaser.Scene {
     }
     const v = id !== undefined ? this.views.get(id) : undefined;
     if (!v) return;
+    const cost = this.spendHint();
+    if (cost) this.toast(cost.trim());
     const g = this.add.graphics({ x: v.c.x, y: v.c.y }).setDepth(40);
     g.lineStyle(this.cs * 0.09, 0xffffff, 1);
     g.strokeRoundedRect(-v.w / 2, -v.h / 2, v.w, v.h, this.cs * 0.26);
@@ -648,7 +675,7 @@ export class PlayScene extends Phaser.Scene {
     if (this.board.cleared) {
       if (this.animating > 0) return void this.time.delayedCall(150, () => this.checkEnd());
       this.ended = true;
-      const stars = Math.max(1, 3 - this.mistakes);
+      const stars = this.maxStars();
       completeLevel(this.n, stars);
       sfx.win();
       haptics.success();
@@ -725,7 +752,12 @@ export class PlayScene extends Phaser.Scene {
           this.tweens.add({ targets: fg, scale: 1, duration: 320, delay: 250 + i * 220, ease: 'Back.easeOut', onStart: () => sfx.star(i) });
         }
       }
-      panel.add(label(this, 0, u * 9, stars === 3 ? 'Perfect — no bounces!' : `${this.mistakes} bounce${this.mistakes === 1 ? '' : 's'}`, u * 4.6, COLORS.sub, false));
+      const costs = [
+        this.mistakes ? `${this.mistakes} bounce${this.mistakes === 1 ? '' : 's'}` : '',
+        this.usedUndo ? 'used Undo' : '',
+        this.usedHint ? 'used a hint' : '',
+      ].filter(Boolean);
+      panel.add(label(this, 0, u * 9, costs.length ? costs.join(' · ') : 'Perfect — planned it all!', u * 4.6, COLORS.sub, false));
       panel.add(levelsBtn());
       panel.add(button(this, { x: u * 20, y: by, w: u * 32, h: u * 14, color: COLORS.primary, label: 'Next', fontSize: u * 6, onClick: () => this.scene.restart({ level: this.n + 1 }) }));
     } else {
