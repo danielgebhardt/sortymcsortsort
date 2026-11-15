@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Foreground artwork for the app icon: three blocks, one sliding out. Kept inside the adaptive-icon safe zone. -->
+  <defs>
+    <g id="chev"><polyline points="-26,-40 22,0 -26,40" fill="none" stroke="#fff" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/></g>
+  </defs>
+  <g transform="translate(477 502)">
+    <!-- vertical coral block (up) -->
+    <rect x="-250" y="-230" width="150" height="300" rx="40" fill="#b8474b"/>
+    <rect x="-250" y="-240" width="150" height="295" rx="40" fill="#ff6b6b"/>
+    <use href="#chev" transform="translate(-175 -165) rotate(-90)"/>
+    <use href="#chev" transform="translate(-175 -20) rotate(-90)"/>
+    <!-- teal block (right) sliding out -->
+    <rect x="-70" y="-110" width="300" height="150" rx="40" fill="#1f8a80"/>
+    <rect x="-70" y="-120" width="300" height="145" rx="40" fill="#2ec4b6"/>
+    <use href="#chev" transform="translate(5 -48)"/>
+    <use href="#chev" transform="translate(150 -48)"/>
+    <!-- amber block (down) -->
+    <rect x="-250" y="110" width="150" height="150" rx="40" fill="#b5852a"/>
+    <rect x="-250" y="100" width="150" height="145" rx="40" fill="#ffbe3d"/>
+    <use href="#chev" transform="translate(-175 172) rotate(90)"/>
+    <!-- violet long block (left) -->
+    <rect x="-70" y="110" width="300" height="150" rx="40" fill="#6b54b8"/>
+    <rect x="-70" y="100" width="300" height="145" rx="40" fill="#9b7bff"/>
+    <use href="#chev" transform="translate(5 172) rotate(180)"/>
+    <use href="#chev" transform="translate(150 172) rotate(180)"/>
+    <!-- motion streaks -->
+    <rect x="250" y="-80" width="70" height="18" rx="9" fill="#2ec4b6" opacity="0.6"/>
+    <rect x="250" y="-30" width="40" height="18" rx="9" fill="#2ec4b6" opacity="0.4"/>
+  </g>
+</svg>
