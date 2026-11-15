@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { buildLevelWithStats, chapterFor, pack, PACKED_LEVELS } from '../src/core/progression';
 import { replay } from '../src/core/solver';
 
@@ -6,6 +6,25 @@ import { replay } from '../src/core/solver';
 //        tsx scripts/generate-levels.ts            → build all 600 from scratch (ignores freezing!)
 //        tsx scripts/generate-levels.ts 31 40      → just print stats for a range
 //        OUT=part.json tsx scripts/generate-levels.ts 1 150   → write that range to a file (for parallel builds)
+// REPAIR="59 60 68" tsx scripts/generate-levels.ts   → rebuild just those levels inside levels.json
+if (process.env.REPAIR) {
+  const file = new URL('../src/levels/levels.json', import.meta.url);
+  const all = JSON.parse(readFileSync(file, 'utf8'));
+  for (const n of process.env.REPAIR.split(/[ ,]+/).filter(Boolean).map(Number)) {
+    if (n <= 30) throw new Error(`level ${n} is frozen`);
+    const { level, stats } = buildLevelWithStats(n);
+    if (!replay(level, level.solution!)) throw new Error(`level ${n}: solution does not clear the board`);
+    all[n - 1] = pack(level);
+    console.log(`L${n} win=${Math.round(stats.winRate * 100)}% needSlide=${stats.needsSlide ? 'Y' : '-'}`);
+  }
+  // REPAIR_OUT: write just the rebuilt levels as {n: level} (for parallel repairs), else patch in place.
+  if (process.env.REPAIR_OUT) {
+    const nums = process.env.REPAIR.split(/[ ,]+/).filter(Boolean).map(Number);
+    writeFileSync(process.env.REPAIR_OUT, JSON.stringify(Object.fromEntries(nums.map((n) => [n, all[n - 1]]))));
+  } else writeFileSync(file, JSON.stringify(all));
+  process.exit(0);
+}
+
 const [from, to] = process.argv[2] ? [Number(process.argv[2]), Number(process.argv[3] ?? process.argv[2])] : [1, PACKED_LEVELS];
 const out = [];
 const t0 = Date.now();

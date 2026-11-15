@@ -219,7 +219,11 @@ export function buildLevelWithStats(n: number, fast = false): { level: Level; st
   let best: { level: Level; stats: LevelStats } | null = null;
   let bestScore = -Infinity;
   let tried = 0;
-  for (let k = 0; k < maxTries; k++) {
+  let foundGood = false;
+  // If nothing good turns up in the usual number of tries, keep looking (up to 4x) before settling.
+  const cap = fast || ci === 0 ? maxTries : maxTries * 4;
+  for (let k = 0; k < cap; k++) {
+    if (k >= maxTries && foundGood) break;
     let gen;
     try {
       gen = generateWithStats(seedFor(n) + k * 7919, p);
@@ -241,6 +245,7 @@ export function buildLevelWithStats(n: number, fast = false): { level: Level; st
     // Mostly: lower random-win rate. Then the older measures — deep chains, few free blocks at the start.
     const score = (good ? 100 : 0) - winRate * 40 + (needsSlide ? 4 : 0) + pullbacks + depth * 1.2 - (initialFree / stats.blocks) * 12 + stats.blocks * 0.1;
     if (score > bestScore) { best = { level, stats }; bestScore = score; }
+    if (good) foundGood = true;
     if (good && tried >= minTries) break;
   }
   if (!best) {
