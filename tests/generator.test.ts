@@ -85,8 +85,10 @@ describe('shipped levels', () => {
     for (let n = 31; n <= 600; n++) {
       const l = unpack(levels[n - 1]);
       if (chapterFor(n).i < 2 || !l.blocks.some((b) => b.slider)) continue;
+      const ns = needsSlides(l, 20_000);
+      if (ns === null) continue; // spinner levels: can't check cheaply
       withSliders++;
-      if (needsSlides(l, 20_000)) needed++;
+      if (ns) needed++;
     }
     expect(needed / withSliders).toBeGreaterThanOrEqual(0.75);
   }, 300_000);

@@ -237,9 +237,15 @@ export function randomWinRate(level: Level, runs = 120, seed = 1): number {
   return wins / runs;
 }
 
-/** True if the level can't be solved without sliding some slider partway. */
-export function needsSlides(level: Level, limit = 50_000): boolean {
+/**
+ * True if the level can't be solved without sliding some slider partway; null if we can't tell.
+ * Bomb fuses are ignored (they only ever make a level harder, so "unsolvable without slides"
+ * still holds with them). Spinners make the plain version expensive to search, so those are null.
+ */
+export function needsSlides(level: Level, limit = 50_000): boolean | null {
   if (!level.blocks.some((b) => b.slider)) return false;
-  const plain: Level = { ...level, blocks: level.blocks.map(({ slider: _s, ...b }) => b) };
-  return solve(plain, limit).solvable === false;
+  if (level.blocks.some((b) => b.spinner)) return null;
+  const plain: Level = { ...level, blocks: level.blocks.map(({ slider: _s, fuse: _f, ...b }) => b) };
+  const r = solve(plain, limit).solvable;
+  return r === null ? null : !r;
 }

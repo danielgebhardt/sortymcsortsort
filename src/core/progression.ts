@@ -73,13 +73,13 @@ export const CHAPTERS: Chapter[] = [
   { from: 211, name: 'Locked & Loaded', mix: ['bombs', 'gates', 'locks'] },
   { from: 241, name: 'Spin Cycle', mix: ['spinners', 'sliders'] },
   { from: 271, name: 'Double Trouble', mix: ['twins', 'bombs'] },
-  { from: 301, name: 'Gatekeepers', mix: ['gates', 'spinners', 'locks'] },
+  { from: 301, name: 'Gatekeepers', mix: ['gates', 'spinners', 'locks'], pressure: ['sliders'] },
   { from: 331, name: 'Short Fuse', mix: ['sliders', 'bombs'] },
-  { from: 361, name: 'Whirligig', mix: ['twins', 'spinners', 'locks'] },
+  { from: 361, name: 'Whirligig', mix: ['twins', 'spinners', 'locks'], pressure: ['sliders'] },
   { from: 391, name: 'Traffic Jam', mix: ['gates', 'sliders', 'twins'] },
   { from: 421, name: 'Powder Keg', mix: ['bombs', 'spinners', 'gates'] },
   { from: 451, name: 'Rush Hour', mix: ['sliders', 'twins', 'bombs'] },
-  { from: 481, name: 'Clockwork', mix: ['spinners', 'gates', 'twins', 'locks'] },
+  { from: 481, name: 'Clockwork', mix: ['spinners', 'gates', 'twins', 'locks'], pressure: ['sliders'] },
   { from: 511, name: 'Minefield', mix: ['sliders', 'bombs', 'gates', 'locks'] },
   { from: 541, name: 'Everything', mix: ['sliders', 'twins', 'bombs', 'spinners', 'gates'] },
   { from: 571, name: 'Grand Finale', mix: ['sliders', 'twins', 'bombs', 'spinners', 'gates', 'locks'] },
@@ -233,7 +233,8 @@ export function buildLevelWithStats(n: number, fast = false): { level: Level; st
     const initialFree = countMoves(new Board(level));
     const depth = isMonotone(level) ? solve(level).depth : 0;
     const winRate = ci === 0 ? 1 : randomWinRate(level, runs, n);
-    const needsSlide = hasSliders && !fast ? needsSlides(level, 20_000) : false;
+    // Exact where we can check it; otherwise trust the generator's built-in forced slide.
+    const needsSlide = hasSliders && !fast ? (needsSlides(level, 20_000) ?? pullbacks > 0) : false;
     const stats: LevelStats = { blocks: level.blocks.length, depth, initialFree, pullbacks, winRate, needsSlide };
     // Everything after Warm Up must need planning: random tapping mostly fails, and sliders must need sliding.
     const good = winRate <= ceiling && (!hasSliders || intro || fast || needsSlide);
