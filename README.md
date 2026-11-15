@@ -4,7 +4,8 @@ A block-sliding puzzle game for Android. Every block has an arrow, and tapping a
 
 - 600 built-in levels in 20 chapters of 30, then endless generated levels after that
 - A new kind of block every chapter for the first 180 levels, then remix chapters that combine them
-- 3 hearts per level, stars for clean runs, undo, hints, saved progress, sound and vibration
+- 3 hearts per level, saved progress, sound and vibration
+- Stars reward planning: each bounce, using Undo, or using a hint costs a star (Undo and hints are unlimited)
 
 ### Chapters and block types
 
@@ -35,7 +36,7 @@ New builds install over old ones and keep your progress.
 npm install
 npm run dev        # open the printed URL; use your browser's phone emulation
 npm test           # logic tests: rules, solver, generator, all shipped levels
-npm run levels     # regenerate src/levels/levels.json after changing the difficulty curve (~5 min, 4 cores)
+npm run levels     # regenerate levels 31-600 after changing the difficulty curve (~10 min, 4 cores; 1-30 stay frozen)
 npx tsx scripts/generate-levels.ts 91 100   # print difficulty stats for a range of levels
 ```
 
@@ -76,6 +77,14 @@ The generator builds each level backwards, as a list of steps the player will un
 - **Gates, locks and bomb fuses** are added so that they still fit the recorded solution.
 
 Every level ships with that solution, and the tests replay it through the real game rules for all 600 levels. Some boards have *traps*, moves that make the level unsolvable. When you hit one, you get Undo, and the hint button tells you when you're already stuck.
+
+### How hard is a level?
+
+Each candidate level is rated by **random play**: 120 simulated players who tap any block that can move, without thinking. From level 31 on, a level only ships if random play almost always fails (mostly 0–5% wins). Slider levels must also be impossible without sliding some slider partway. The generator builds that in deliberately with a four-block cycle around a slider. The tests check both rules across all shipped levels.
+
+### Never change finished levels
+
+Levels 1–30 are frozen: `npm run levels` copies them unchanged and the tests pin their hash. When more levels ship, raise `FROZEN` in `scripts/generate-parallel.sh` and update the pinned hash in `tests/generator.test.ts`. To rebuild a few specific levels, run `REPAIR="45 46" npx tsx scripts/generate-levels.ts`.
 
 ## Building the APK locally (optional)
 
