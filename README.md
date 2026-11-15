@@ -2,9 +2,22 @@
 
 A block-sliding puzzle game for Android. Every block has an arrow, and tapping a block slides it that way. If the path is clear, the block slides off the board. If something is in the way, it bounces back and you lose a heart. Clear the board to win.
 
-- 300 built-in levels that get harder as you go, then endless generated levels after that
-- Walls (from level 31) and lock-and-key blocks (from level 61)
-- 3 hearts per level, stars for clean runs, hints, saved progress, sound and vibration
+- 600 built-in levels in 20 chapters of 30, then endless generated levels after that
+- A new kind of block every chapter for the first 180 levels, then remix chapters that combine them
+- 3 hearts per level, stars for clean runs, undo, hints, saved progress, sound and vibration
+
+### Chapters and block types
+
+| Levels | Chapter | What's new |
+| --- | --- | --- |
+| 1–30 | Warm Up | Basics. **Walls** from level 12, **locks and keys** from level 20 |
+| 31–60 | Sliders | **Sliders** (double arrows) slide as far as they can and *stay*. Slide too early and you can seal other blocks in |
+| 61–90 | Twins | **Twins** (linked badge and dotted line) leave together. Both paths must be clear at once |
+| 91–120 | Bombs | **Bombs** count down with every move. Dig them out before they reach zero |
+| 121–150 | Spinners | **Spinners** turn a quarter clockwise every time another block leaves |
+| 151–180 | Gates | **Gates** block a cell until the block with the matching key badge leaves |
+| 181–600 | Remix | Two to five of the above per chapter, ending with *Everything* and *Grand Finale* |
+| 601+ | Endless | The remix chapters repeat with freshly generated levels |
 
 ## Install on your phone
 
@@ -22,7 +35,8 @@ New builds install over old ones and keep your progress.
 npm install
 npm run dev        # open the printed URL; use your browser's phone emulation
 npm test           # logic tests: rules, solver, generator, all shipped levels
-npm run levels     # regenerate src/levels/levels.json after changing the difficulty curve
+npm run levels     # regenerate src/levels/levels.json after changing the difficulty curve (~5 min, 4 cores)
+npx tsx scripts/generate-levels.ts 91 100   # print difficulty stats for a range of levels
 ```
 
 To try it on a phone during development, run `npm run dev` and open the network URL on a phone connected to the same Wi-Fi.
@@ -40,10 +54,10 @@ To try it on a phone during development, run `npm run dev` and open the network 
 ```
 src/
   core/        pure game logic, no Phaser (easy to test)
-    board.ts       grid, sliding rules, locks and walls
-    solver.ts      proves a level can be solved and measures difficulty
-    generator.ts   builds levels backwards so they are always solvable
-    progression.ts tutorial levels and the difficulty curve
+    board.ts       the rules: sliding, bouncing, locks, walls, sliders, twins, bombs, spinners, gates
+    solver.ts      exact search (used for hints and difficulty ratings) and solution replay
+    generator.ts   builds levels backwards so they are always solvable, and records the solution
+    progression.ts chapters, tutorial levels and the difficulty curve
   scenes/      Menu, Levels (level select), Play
   ui/          buttons, icons, layout helpers
   audio/       synthesized sound effects, haptics
@@ -54,7 +68,14 @@ assets/        icon and splash sources (regenerate with `npx @capacitor/assets g
 
 ### Why every level is solvable
 
-Once a block leaves, it never comes back, and removing a block can only clear paths. So the generator builds each level in reverse. It places blocks one at a time, and each new block must have a clear path to the edge at the moment it is placed. Removing the blocks in the reverse order of placement always works. The solver double-checks every level in the tests.
+The generator builds each level backwards, as a list of steps the player will undo in reverse:
+
+- **Place a block** whose path to the edge is clear right now. Blocks placed later leave earlier, so they're allowed to sit in its way.
+- **Pull a slider back** along its line, but only if something sits right in front of it. In the real game, tapping it slides it forward to exactly that spot.
+- **Turn spinners back** a quarter each time a block is placed, because in the real game they turn forward when that block leaves.
+- **Gates, locks and bomb fuses** are added so that they still fit the recorded solution.
+
+Every level ships with that solution, and the tests replay it through the real game rules for all 600 levels. Some boards have *traps*, moves that make the level unsolvable. When you hit one, you get Undo, and the hint button tells you when you're already stuck.
 
 ## Building the APK locally (optional)
 

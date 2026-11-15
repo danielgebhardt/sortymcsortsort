@@ -7,7 +7,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "test": "vitest run",
-    "levels": "tsx scripts/generate-levels.ts",
+    "levels": "bash scripts/generate-parallel.sh",
     "cap:sync": "npm run build && cap sync android"
   },
   "license": "UNLICENSED",

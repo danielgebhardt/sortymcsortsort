@@ -1,17 +1,25 @@
-import { buildLevel, PACKED_LEVELS, unpack, PackedLevel } from '../core/progression';
+import { buildLevel, chapterFor, INTRO, PACKED_LEVELS, unpack, PackedLevel } from '../core/progression';
 import type { Level } from '../core/types';
 import packed from './levels.json';
 
 const levels = packed as PackedLevel[];
+const cache = new Map<number, Level>();
 
 /** Level n (1-based). Levels past the shipped pack are generated on demand. */
 export function getLevel(n: number): Level {
   if (n <= levels.length) return unpack(levels[n - 1]);
-  return buildLevel(n);
+  if (!cache.has(n)) cache.set(n, buildLevel(n, true));
+  return cache.get(n)!;
 }
 
 export const SHIPPED_LEVELS = Math.max(levels.length, PACKED_LEVELS);
 
-/** First level that introduces each mechanic — used to show a one-time tip. */
-export const FIRST_WALL_LEVEL = levels.findIndex((l) => (l.wl?.length ?? 0) > 0) + 1;
-export const FIRST_LOCK_LEVEL = levels.findIndex((l) => l.b.some((b) => b.length > 4)) + 1;
+/** A one-time tip for this level, if it introduces something. */
+export function tipFor(n: number): string {
+  if (n === INTRO.walls) return 'Stone walls never move —\nplan around them.';
+  if (n === INTRO.locks) return 'Locked blocks open once their\nmatching key block slides out.';
+  const { chapter, i } = chapterFor(n);
+  return i === 0 && chapter.tip ? chapter.tip : '';
+}
+
+export { chapterFor };

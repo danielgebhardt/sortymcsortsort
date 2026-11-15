@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SHIPPED_LEVELS } from '../levels';
+import { chapterFor, SHIPPED_LEVELS } from '../levels';
 import { progress } from '../storage/progress';
 import { COLORS, shade } from '../theme';
 import { button, label } from '../ui/button';
@@ -34,11 +34,13 @@ export class LevelSelectScene extends Phaser.Scene {
       icon: (g, s) => draw.backIcon(g, 0, -s * 0.04, s * 0.7, 0xffffff),
       onClick: () => this.scene.start('Menu'),
     });
-    label(this, W / 2, top - u * 1.5, 'Levels', u * 7);
+    const first0 = this.page * PER_PAGE + 1;
+    label(this, W / 2, top - u * 2.5, chapterFor(first0).chapter.name, u * 6.5);
+    label(this, W / 2, top + u * 4, `Chapter ${this.page + 1}`, u * 3.6, COLORS.sub, false);
 
     const cell = Math.min(u * 18, (H - top - safe.bottom - u * 40) / ROWS);
     const gx = W / 2 - ((COLS - 1) * cell) / 2;
-    const gy = top + u * 14 + cell / 2;
+    const gy = top + u * 17 + cell / 2;
     const first = this.page * PER_PAGE + 1;
     for (let i = 0; i < PER_PAGE; i++) {
       const n = first + i;

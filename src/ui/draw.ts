@@ -103,3 +103,56 @@ export function soundIcon(g: G, cx: number, cy: number, s: number, color: number
     g.lineBetween(cx + s * 0.38, cy - s * 0.14, cx + s * 0.12, cy + s * 0.14);
   }
 }
+
+/** Two interlocking rings — marks a twin. */
+export function link(g: G, cx: number, cy: number, s: number, color: number) {
+  g.lineStyle(s * 0.13, color, 1);
+  g.strokeEllipse(cx - s * 0.16, cy, s * 0.5, s * 0.32);
+  g.strokeEllipse(cx + s * 0.16, cy, s * 0.5, s * 0.32);
+}
+
+/** A round bomb with a fuse. The number is drawn separately as text. */
+export function bomb(g: G, cx: number, cy: number, s: number, urgent: boolean) {
+  g.fillStyle(urgent ? 0x5a0d1a : 0x15182e, 1);
+  g.fillCircle(cx, cy + s * 0.04, s * 0.38);
+  g.lineStyle(s * 0.06, urgent ? 0xff5a6e : 0xffffff, 0.9);
+  g.strokeCircle(cx, cy + s * 0.04, s * 0.38);
+  g.lineStyle(s * 0.07, 0xd9b38c, 1);
+  g.beginPath();
+  g.moveTo(cx + s * 0.2, cy - s * 0.26);
+  g.lineTo(cx + s * 0.32, cy - s * 0.42);
+  g.strokePath();
+  g.fillStyle(0xffbe3d, 1);
+  g.fillCircle(cx + s * 0.34, cy - s * 0.45, s * 0.08);
+}
+
+/** Circular arrows around a spinner's centre. */
+export function spinRing(g: G, cx: number, cy: number, r: number, color: number, alpha = 0.9) {
+  g.lineStyle(r * 0.16, color, alpha);
+  for (const start of [0.25, Math.PI + 0.25]) {
+    g.beginPath();
+    g.arc(cx, cy, r, start, start + Math.PI * 0.7, false);
+    g.strokePath();
+    const a = start + Math.PI * 0.7;
+    const tx = cx + Math.cos(a) * r, ty = cy + Math.sin(a) * r;
+    const nx = -Math.sin(a), ny = Math.cos(a); // tangent (clockwise)
+    const ox = Math.cos(a), oy = Math.sin(a); // outward
+    g.fillStyle(color, alpha);
+    g.fillTriangle(
+      tx + nx * r * 0.32, ty + ny * r * 0.32,
+      tx + ox * r * 0.24, ty + oy * r * 0.24,
+      tx - ox * r * 0.24, ty - oy * r * 0.24,
+    );
+  }
+}
+
+export function undoIcon(g: G, cx: number, cy: number, s: number, color: number) {
+  g.lineStyle(s * 0.13, color, 1);
+  g.beginPath();
+  g.arc(cx + s * 0.04, cy + s * 0.06, s * 0.26, Math.PI * 1.05, Math.PI * 2.35, false);
+  g.strokePath();
+  g.fillStyle(color, 1);
+  const tx = cx + s * 0.04 + Math.cos(Math.PI * 1.05) * s * 0.26;
+  const ty = cy + s * 0.06 + Math.sin(Math.PI * 1.05) * s * 0.26;
+  g.fillTriangle(tx - s * 0.17, ty + s * 0.02, tx + s * 0.13, ty - s * 0.12, tx + s * 0.08, ty + s * 0.2);
+}

@@ -25,8 +25,11 @@ export const DIR_COLORS: Record<Dir, number> = {
   left: 0x9b7bff,
 };
 
-/** Colours used to match a key block to its locked block. */
-export const LOCK_COLORS = [0xffd84d, 0x5ee0ff, 0xff7ad9];
+/** Colours used to match a key block to the locks and gates it opens. */
+export const KEY_COLORS = [0xffd84d, 0x5ee0ff, 0xff7ad9, 0x9cff6b, 0xffa94d, 0xc58cff];
+
+/** Colours for twin pairs (each pair gets its own). */
+export const TWIN_COLORS = [0xffffff, 0xffe066, 0x8ef0ff];
 
 export const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
