@@ -80,7 +80,7 @@ Every level ships with that solution, and the tests replay it through the real g
 
 ### How hard is a level?
 
-Each candidate level is rated by **random play**: 120 simulated players who tap any block that can move, without thinking. From level 31 on, a level only ships if random play almost always fails (mostly 0–5% wins). Slider levels must also be impossible without sliding some slider partway. The generator builds that in deliberately with a four-block cycle around a slider. The tests check both rules across all shipped levels.
+Each candidate level is rated by **random play**: 120 simulated players who tap any block that can move, without thinking. From level 31 on, a level only ships if random play almost always fails (mostly 0–5% wins). Slider levels must also be impossible without sliding some slider partway. The generator builds that in deliberately with a four-block cycle around a slider. Every slider must also *matter*: either the solution slides it partway, or sliding it at the wrong time is a trap. Any that don't are turned into plain blocks (`demoteUselessSliders`). The tests check all three rules across every shipped level.
 
 ### Never change finished levels
 

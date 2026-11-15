@@ -1,6 +1,6 @@
 import { Board, cellsOf, headOf } from './board';
 import { Rng } from './rng';
-import { replay } from './solver';
+import { demoteUselessSliders, replay } from './solver';
 import { Block, DELTA, DIRS, Dir, Gate, Level, isHorizontal, turnCCW } from './types';
 
 export interface GenParams {
@@ -161,7 +161,8 @@ export function generateWithStats(seed: number, p: GenParams): GenResult {
         else if (setups.length && rng.next() < 0.75) cands = setups;
       }
       const c = choose(rng, cands, p.tangle);
-      if (want(left.sliders) && c.block.len <= 3) {
+      // A slider on the edge pointing out could never slide partway — don't waste one there.
+      if (c.ray > 0 && want(left.sliders) && c.block.len <= 3) {
         c.block.slider = true;
         left.sliders--;
       }
@@ -195,6 +196,7 @@ export function generateWithStats(seed: number, p: GenParams): GenResult {
   const level: Level = { w: p.w, h: p.h, blocks, walls, gates, solution: steps.slice().reverse() };
   addLocks(rng, level, p.locks);
   addBombs(rng, level, p.bombs, p.bombSlack);
+  demoteUselessSliders(level);
   const out = normalize(level);
   if (!replay(out, out.solution!)) throw Object.assign(new Error(`generator produced a level its own solution can't clear (seed ${seed})`), { level: out });
   return { level: out, pullbacks };

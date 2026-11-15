@@ -249,3 +249,39 @@ export function needsSlides(level: Level, limit = 50_000): boolean | null {
   const r = solve(plain, limit).solvable;
   return r === null ? null : !r;
 }
+
+/**
+ * Sliders that never matter: the shipped solution never slides them partway, and at no point
+ * along it would sliding them partway ruin the board. They behave exactly like plain blocks
+ * (typically: sitting on the edge, pointing out), so they shouldn't look like sliders.
+ * A search that gives up counts as "matters", to be safe.
+ */
+export function uselessSliders(level: Level, limit = 5_000): number[] {
+  const solution = level.solution;
+  if (!solution || !level.blocks.some((b) => b.slider)) return [];
+  const useful = new Set<number>();
+  const board = new Board(level);
+  const check = () => {
+    for (const s of board.blocks.values()) {
+      if (!s.slider || useful.has(s.id) || board.isLocked(s)) continue;
+      const { hit, distance } = board.probe(s);
+      if (hit === null || distance === 0) continue;
+      const next = copyBoard(board);
+      next.tap(s.id);
+      if (search(next, limit).solvable !== true) useful.add(s.id);
+    }
+  };
+  check();
+  for (const id of solution) {
+    if (board.tap(id).kind === 'slide') useful.add(id);
+    check();
+  }
+  return level.blocks.filter((b) => b.slider && !useful.has(b.id)).map((b) => b.id);
+}
+
+/** Turn useless sliders (see `uselessSliders`) into plain blocks. Returns how many changed. */
+export function demoteUselessSliders(level: Level): number {
+  const ids = new Set(uselessSliders(level));
+  for (const b of level.blocks) if (ids.has(b.id)) delete b.slider;
+  return ids.size;
+}
