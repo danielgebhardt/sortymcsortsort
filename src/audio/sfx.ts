@@ -12,7 +12,8 @@ function ac(): AudioContext | null {
       return null;
     }
   }
-  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+  // Browsers start audio suspended until a tap; iOS can also report 'interrupted' (e.g. after a call).
+  if (ctx.state !== 'running') ctx.resume().catch(() => {});
   return ctx;
 }
 

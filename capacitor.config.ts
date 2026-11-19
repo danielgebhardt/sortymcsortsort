@@ -8,6 +8,13 @@ const config: CapacitorConfig = {
   android: {
     allowMixedContent: false,
   },
+  ios: {
+    backgroundColor: '#1b1f3b',
+    // The game never scrolls: no rubber-band bounce while tapping blocks.
+    scrollEnabled: false,
+    // Full-screen web view; the game handles safe areas itself (env(safe-area-inset-*)).
+    contentInset: 'never',
+  },
 };
 
 export default config;

@@ -1,8 +1,8 @@
-name: Android build
+name: Build APK + IPA + web app
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
   workflow_dispatch:
 
@@ -39,6 +39,12 @@ jobs:
       - name: Build web app
         run: npm run build
 
+      # The same build is the installable web app on GitHub Pages (see the pages job).
+      - uses: actions/upload-pages-artifact@v4
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        with:
+          path: dist
+
       - name: Copy web app into Android project
         run: npx cap sync android
 
@@ -66,3 +72,77 @@ jobs:
             --prerelease \
             --title "Latest build #${{ github.run_number }}" \
             --notes "Debug APK built from ${{ github.sha }}. On your phone: download, open, allow 'Install unknown apps' if asked."
+
+  # Installable web app on GitHub Pages (iPhone/iPad "Add to Home Screen", Android "Install app").
+  # Needs repo Settings → Pages → Source = GitHub Actions (the workflow token can't switch it on).
+  pages:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  # Unsigned iOS build for sideloading with a free Apple ID (Xcode or AltStore re-sign it on install).
+  # Runs on every push as a check (macOS minutes are free for public repos); attached to the release from main.
+  # needs: build, because on main the build job (re)creates the "latest" release this uploads to.
+  ios:
+    needs: build
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Web build, icons, Capacitor sync
+        run: npm run ios
+
+      - name: Build unsigned .ipa
+        working-directory: ios/App
+        run: |
+          xcodebuild -version
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" MARKETING_VERSION="0.1.$GITHUB_RUN_NUMBER" \
+            -quiet build
+          rm -rf Payload && mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qry ../../sorty-mcsort-sort.ipa Payload
+          ls -l ../../sorty-mcsort-sort.ipa
+
+      - name: Check the .ipa contents
+        run: |
+          unzip -l sorty-mcsort-sort.ipa > ipa.txt
+          grep -q 'Payload/App.app/Frameworks/Capacitor.framework/' ipa.txt
+          grep -q 'Payload/App.app/public/index.html' ipa.txt
+          grep -qE 'Payload/App.app/public/assets/index-.*\.js' ipa.txt
+          grep -q 'Payload/App.app/Info.plist' ipa.txt
+          echo ".ipa contains Capacitor.framework, public/index.html and the JS assets"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sorty-mcsort-sort-ipa
+          path: sorty-mcsort-sort.ipa
+
+      - name: Attach .ipa to the "latest" pre-release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload latest sorty-mcsort-sort.ipa --clobber --repo "$GITHUB_REPOSITORY"
