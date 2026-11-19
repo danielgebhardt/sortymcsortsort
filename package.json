@@ -1,14 +1,16 @@
 {
   "name": "sortymcsortsort",
   "version": "0.1.0",
-  "description": "Sorty McSort Sort — a block-sliding puzzle game for Android",
+  "description": "Sorty McSort Sort \u2014 a block-sliding puzzle game for Android",
   "scripts": {
     "dev": "vite --host",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "test": "vitest run",
     "levels": "bash scripts/generate-parallel.sh",
-    "cap:sync": "npm run build && cap sync android"
+    "cap:sync": "npm run build && cap sync android",
+    "ios": "npm run build && tsx scripts/icon.ts && cap sync ios",
+    "ios:open": "cap open ios"
   },
   "license": "UNLICENSED",
   "dependencies": {
@@ -21,7 +23,9 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.6.2",
+    "@capacitor/ios": "^8.6.2",
     "@types/node": "^22.20.5",
+    "sharp": "^0.35.5",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vite": "^8.3.8",

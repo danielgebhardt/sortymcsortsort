@@ -53,4 +53,18 @@ async function start() {
   (window as unknown as { __game: Phaser.Game }).__game = game;
 }
 
+/**
+ * Web app only (GitHub Pages / Add to Home Screen): register the offline service worker and ask the
+ * browser to keep our storage (saved progress) instead of evicting it. Never in the native apps,
+ * and not in dev (the dev server has no sw.js).
+ */
+function initWebApp() {
+  if (!import.meta.env.PROD || Capacitor.isNativePlatform() || !('serviceWorker' in navigator)) return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+  navigator.storage?.persist?.().catch(() => {});
+}
+
+initWebApp();
 start();

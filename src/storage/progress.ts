@@ -12,9 +12,19 @@ export interface Progress {
 const KEY = 'progress.v1';
 let state: Progress = { unlocked: 1, stars: {}, sound: true, haptics: true };
 
+// Capacitor Preferences stores natively on Android/iOS and in localStorage in a browser
+// (the web app). If the plugin fails for any reason, fall back to localStorage directly.
+async function read(): Promise<string | null> {
+  try {
+    return (await Preferences.get({ key: KEY })).value;
+  } catch {
+    return localStorage.getItem(KEY);
+  }
+}
+
 export async function loadProgress(): Promise<Progress> {
   try {
-    const { value } = await Preferences.get({ key: KEY });
+    const value = await read();
     if (value) state = { ...state, ...JSON.parse(value) };
   } catch {
     // first run or storage unavailable: keep defaults
@@ -25,7 +35,14 @@ export async function loadProgress(): Promise<Progress> {
 export const progress = () => state;
 
 function save() {
-  Preferences.set({ key: KEY, value: JSON.stringify(state) }).catch(() => {});
+  const value = JSON.stringify(state);
+  Preferences.set({ key: KEY, value }).catch(() => {
+    try {
+      localStorage.setItem(KEY, value);
+    } catch {
+      // storage full or blocked: progress stays in memory for this session
+    }
+  });
 }
 
 export function completeLevel(n: number, stars: number) {
