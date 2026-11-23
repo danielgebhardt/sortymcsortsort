@@ -1,3 +1,5 @@
+> **Source of truth:** the home lab Forgejo server. This GitHub repository is a read-only copy, updated within minutes. Do not push or open pull requests here.
+
 # Sorty McSort Sort
 
 A block-sliding puzzle game for Android. Every block has an arrow, and tapping a block slides it that way. If the path is clear, the block slides off the board. If something is in the way, it bounces back and you lose a heart. Clear the board to win.
