@@ -56,9 +56,11 @@ Check with `whoami`: `fjagent` means you are. Then these rules come first, over 
   ```bash
   git push origin HEAD:refs/for/main/<topic> -o title="WIP: <title>" -o description="<what, why, checks run>"
   ```
-  The first push opens the pull request and prints its link (the API lists its head as `refs/pull/<number>/head`).
-  Every later push to the same `refs/for/main/<topic>` updates it; after a rebase or an amend add
-  `-o force-push=true`. Title and description are read on the first push only.
+  Push options can't contain line breaks: keep the description on one line (add detail later in a comment).
+  The first push opens the pull request and prints its link, worded "Visit the existing pull request" even when
+  it's new (the API lists its head as `refs/pull/<number>/head`). Every later push to the same
+  `refs/for/main/<topic>` updates it; after a rebase or an amend add `-o force-push=true`. Title and description
+  are read on the first push only.
 - **Save often:** your worktree is on a disk that isn't backed up. Commit and push to your pull request at every
   checkpoint, so nothing is lost if the lab restarts. Keep "WIP:" at the start of the title until you're done.
 - **Checks:** no CI runs on lab pull requests. Run them yourself before you finish, and put the results in the pull
