@@ -38,3 +38,49 @@ Read `README.md` for the rules, chapters, layout and level pipeline.
 - `src/core`: pure rules (board, solver, generator, progression), no Phaser. `src/levels/levels.json`: 600 shipped levels with their solutions.
 - **Never change a finished level.** Levels 1–30 are frozen (hash pinned in `tests/generator.test.ts`, `FROZEN` in `scripts/generate-parallel.sh`). Raise both as levels ship.
 - `npm run levels` regenerates 31–600 in parallel; `REPAIR="45 46" npx tsx scripts/generate-levels.ts` rebuilds single levels.
+
+## Lab sessions (the home lab's dev VM)
+
+<!-- From home-lab config/forgejo/lab-sessions-claude-md.md (runbook 07 §16; decision 43). Keep this section in sync with it. -->
+
+You may be a **lab session**: Claude Code on the home lab's dev VM, started from the Claude app ("dev: …").
+Check with `whoami`: `fjagent` means you are. Then these rules come first, over anything else in this file:
+
+- **Where the code lives:** `origin` is the lab's Forgejo (`https://git.lab.dgebhardt.com/daniel/sortymcsortsort`), the
+  source of truth. A GitHub copy, if there is one, is read-only and filled from Forgejo: never push or open PRs there.
+- **No branches on Forgejo:** you have read access only, so Forgejo refuses any push to a branch (`main` included).
+  Work on any local branch and hand your work in as a pull request pushed with AGit (below). Never merge, and don't
+  ask how to get around this: the owner reviews and merges.
+- **No tags or releases:** only the owner creates them (Forgejo refuses yours).
+- **A pull request is a push** (Forgejo's AGit flow). Pick one short topic per task (lower case, dashes), then:
+  ```bash
+  git push origin HEAD:refs/for/main/<topic> -o title="WIP: <title>" -o description="<what, why, checks run>"
+  ```
+  The first push opens the pull request and prints its link (the API lists its head as `refs/pull/<number>/head`).
+  Every later push to the same `refs/for/main/<topic>` updates it; after a rebase or an amend add
+  `-o force-push=true`. Title and description are read on the first push only.
+- **Save often:** your worktree is on a disk that isn't backed up. Commit and push to your pull request at every
+  checkpoint, so nothing is lost if the lab restarts. Keep "WIP:" at the start of the title until you're done.
+- **Checks:** no CI runs on lab pull requests. Run them yourself before you finish, and put the results in the pull
+  request's description or a comment:
+  - `npm ci`
+  - `npx tsc --noEmit`
+  - `npm test`
+  - `npm run build`
+- **Forgejo's API**, with your own token (no dollar signs in these blocks on purpose: Forgejo's repo templates would
+  expand them). Your open pull requests, with their numbers:
+  ```bash
+  curl -sS -H @/home/fjagent/.config/forgejo/auth-header 'https://git.lab.dgebhardt.com/api/v1/repos/daniel/sortymcsortsort/pulls?state=open' | python3 -c 'import json,sys; [print(p["number"], p["head"]["ref"], p["title"]) for p in json.load(sys.stdin)]'
+  ```
+  When you're done, take "WIP:" out of the title (PATCH `pulls/<number>`), or add a comment (POST `issues/<number>/comments`):
+  ```bash
+  python3 - <<'PY' > /tmp/fj.json
+  import json; print(json.dumps({"title": "<title without WIP>"}))   # or {"body": "<comment>"}
+  PY
+  curl -sS -X PATCH -H @/home/fjagent/.config/forgejo/auth-header -H 'Content-Type: application/json' \
+    --data @/tmp/fj.json https://git.lab.dgebhardt.com/api/v1/repos/daniel/sortymcsortsort/pulls/<number> | python3 -c 'import json,sys; print(json.load(sys.stdin).get("html_url"))'
+  ```
+  Then give the owner the link.
+- **Don't** change CI workflow files unless the task is about CI (say so in the pull request), add secrets or
+  credentials to the repo, or install anything system-wide (you can't; use the project's own tooling).
+- **Memory and CPU are shared** with other lab sessions and the MTP runner: one heavy build or test run at a time.
