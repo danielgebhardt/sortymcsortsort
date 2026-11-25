@@ -69,6 +69,8 @@ Check with `whoami`: `fjagent` means you are. Then these rules come first, over 
   - `npx tsc --noEmit`
   - `npm test`
   - `npm run build`
+  - `npx playwright install --only-shell chromium`
+  - `node e2e/webapp.cjs`
 - **Forgejo's API**, with your own token (no dollar signs in these blocks on purpose: Forgejo's repo templates would
   expand them). Your open pull requests, with their numbers:
   ```bash
