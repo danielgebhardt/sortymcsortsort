@@ -6,7 +6,9 @@
  *      progress survives another offline reload.
  *
  * Usage: npm run build && node e2e/webapp.cjs
- * Needs the `playwright` package (preinstalled in the cloud dev container; not a project dependency).
+ * Uses the project's `playwright` dev dependency (installed by npm ci; it downloads no browsers).
+ * The browser comes from `npx playwright install --only-shell chromium`; /opt/pw-browsers/chromium
+ * is used instead when it exists.
  */
 const { chromium } = require('playwright');
 const http = require('node:http');
