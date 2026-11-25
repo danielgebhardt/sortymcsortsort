@@ -31,8 +31,8 @@ Read `README.md` for the rules, chapters, layout and level pipeline.
 
 ## Checks before pushing main
 - `npx tsc --noEmit`, `npm test` (includes replaying all 600 shipped solutions, difficulty and variety rules, frozen levels 1–30).
-- `npm run build && node e2e/webapp.cjs`: serves `dist/` under `/sortymcsortsort/`, checks Chrome's installability errors are empty (persistent profile, not incognito), the service worker controls the page after a reload, and offline the game boots, a level can be played and progress persists.
-- Playwright playthroughs at Pixel 7 size through the real touch UI. For Playwright, use `executablePath /opt/pw-browsers/chromium` if it exists.
+- `npx playwright install --only-shell chromium` once (Playwright is a pinned dev dependency; `npm ci` downloads no browsers), then `npm run build && node e2e/webapp.cjs`: serves `dist/` under `/sortymcsortsort/`, checks Chrome's installability errors are empty (persistent profile, not incognito), the service worker controls the page after a reload, and offline the game boots, a level can be played and progress persists.
+- Playwright playthroughs at Pixel 7 size through the real touch UI, with the project's `playwright` and the browser from `npx playwright install --only-shell chromium`; use `executablePath /opt/pw-browsers/chromium` instead if it exists.
 
 ## Levels
 - `src/core`: pure rules (board, solver, generator, progression), no Phaser. `src/levels/levels.json`: 600 shipped levels with their solutions.
